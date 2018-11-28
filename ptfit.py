@@ -89,7 +89,7 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
                 # so Q and U should have x 1/2
                 ncovI = np.diag(1./div.reshape(-1))
                 ncov[0,0] = ncovI
-                if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI/2.
+                if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI*2.
             elif dncomp==3:
                 assert ncomp==dncomp
                 for i in range(dncomp): ncov[i,i] = 1./div[i].reshape(-1)
