@@ -1,2 +1,2 @@
-planck_files: /home/r/rbond/sigurdkn/project/actpol/planck/car/
-cat_files: /home/r/rbond/sigurdkn/project/actpol/mapdata/depot/sigurdkn/pointsrcs/mr3c/mr3c_merged_f???.txt
+planck_files: /global/project/projectdirs/act/data/planck/
+cat_files: /global/project/projectdirs/act/data/catalogs/mr3c_merged_f???.txt

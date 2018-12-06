@@ -3,7 +3,7 @@ from orphics import maps,io,cosmology,mpi,stats
 from pixell import enmap,reproject,powspec
 import numpy as np
 import os,sys
-import yaml,pandas as pd
+import yaml
 import ptfit
 
 
@@ -113,10 +113,24 @@ for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
+    modlmap = stamp.modlmap()
+    n2d = modlmap*0. + (tnoise*np.pi/180./60.)**2.
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
-    famp,cov,_ = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=div,ps=ps,beam=pfwhm)
+    famp,cov,_ = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
     assert cov.size==1
     s.add_to_stats("results",(task,famp,cov.reshape(-1)[0]))
+    print(famp,a_amps[task])
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
+
+s.get_stats()
+
+if rank==0:
+    results = s.vectors['results']
+    np.savetxt("results_%s.txt" % freq,results)
+    try: 
+        rejected = s.vectors['rejected']
+        np.savetxt("rejected_%s.txt" % freq,rejected)
+    except:
+        pass
