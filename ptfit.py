@@ -55,9 +55,7 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
     assert Ny==N
     ncomp = 1 if len(shape)==2 else shape[0]
     assert ncomp==1 or ncomp==3
-
     template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1),)), rbeam)
-
     if totp2d is None:
         modlmap = enmap.modlmap(shape,wcs)
         if ps.ndim==1: ps = ps.reshape((1,1,ps.size))
@@ -89,18 +87,15 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
                 # so Q and U should have x 1/2
                 ncovI = np.diag(1./div.reshape(-1))
                 ncov[0,0] = ncovI
-                if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI/2.
+                if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI*2.
             elif dncomp==3:
                 assert ncomp==dncomp
                 for i in range(dncomp): ncov[i,i] = 1./div[i].reshape(-1)
             else:
                 raise ValueError
-                
             ccov += ncov
     else:
         ccov = fcov_to_rcorr(shape,wcs,totp2d,N)
-
-
     # --- Make sure that the pcov is in the right order vector(I,Q,U) ---
     # It is currently in (ncomp,ncomp,n,n) order
     # We transpose it to (ncomp,n,ncomp,n) order
@@ -108,15 +103,14 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
     # a row/column will correspond to an (I,Q,U) vector
     ccov = np.transpose(ccov,(0,2,1,3))
     ccov = ccov.reshape((ncomp*N**2,ncomp*N**2))
-        
     funcs = []
     for i in range(ncomp):
         tzeros = np.zeros((ncomp*N**2,))
         tzeros[i*ncomp*N**2:(i+1)*ncomp*N**2] = template.reshape(-1)
-        funcs.append(lambda x: tzeros)
-        
-    res = fit_linear_model(ells,imap.reshape(-1),ccov,funcs=funcs,dofs=None)
-    pflux,cov,_,_ = res
+        funcs.append(lambda x: tzeros.copy())
+    pflux,cov,_,_ = fit_linear_model(ells,imap.reshape(-1),ccov,funcs=funcs,dofs=None)
+    pflux = pflux.reshape((ncomp,))
+    cov = cov.reshape((ncomp,ncomp))
     fit = np.zeros((ncomp,N,N))
     for i in range(ncomp): fit[i] = template.copy()*pflux[i]
     return pflux,cov,fit
