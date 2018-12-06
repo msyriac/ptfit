@@ -70,7 +70,6 @@ ras,decs,act_amps = np.loadtxt(cat_file,usecols=[1,2,4],unpack=True)
 amps = correct_amplitude(act_amps,afwhm,pfwhm)
 noise = tnoise/pfwhm
 sns = amps/noise
-io.hist(sns,bins=np.linspace(0.,20.,40),save_file="%s_sns.png" % freq)
 Ntot = len(amps)
 # Set A
 a_ras = ras[sns>sncut]
@@ -84,11 +83,13 @@ b_amps = amps[sns<=sncut]
 Na = len(a_ras)
 Nb = len(b_ras)
 assert Ntot==(Na+Nb)
-print("Total number of sources: ", Ntot)
-print("Set A: ", Na, " | ", Na*100./Ntot, " % ")
-print("Set B: ", Nb, " | ", Nb*100./Ntot, " % ")
 # MPI distribute
 comm,rank,my_tasks = mpi.distribute(Na,verbose=True)
+if rank==0: io.hist(sns,bins=np.linspace(0.,20.,40),save_file=io.dout_dir+"%s_sns.png" % freq)
+if rank==0:
+    print("Total number of sources: ", Ntot)
+    print("Set A: ", Na, " | ", Na*100./Ntot, " % ")
+    print("Set B: ", Nb, " | ", Nb*100./Ntot, " % ")
 s = stats.Stats(comm)
 # Load map
 imap = 0.
@@ -121,7 +122,7 @@ for task in my_tasks:
     famp,cov,_ = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
     assert cov.size==1
     s.add_to_stats("results",(task,famp,cov.reshape(-1)[0]))
-    print(famp,a_amps[task])
+    #print(famp,a_amps[task])
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
