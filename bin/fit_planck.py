@@ -1,9 +1,10 @@
 from __future__ import print_function
 from orphics import maps,io,cosmology,mpi,stats
-from pixell import enmap,reproject
+from pixell import enmap,reproject,powspec
 import numpy as np
 import os,sys
 import yaml,pandas as pd
+import ptfit
 
 
 """
@@ -90,22 +91,19 @@ print("Set B: ", Nb, " | ", Nb*100./Ntot, " % ")
 comm,rank,my_tasks = mpi.distribute(Na,verbose=True)
 s = stats.Stats(comm)
 # Load map
-imap = 0
-imap0 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_0_map.fits" % freq[1:])
-divmap0 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_0_ivar.fits" % freq[1:])
+imap = 0.
+imap0 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_0_map.fits" % freq[1:],sel=np.s_[0,...])
+divmap0 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_0_ivar.fits" % freq[1:],sel=np.s_[0,...])
 imap += imap0*divmap0
 del imap0
-imap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_map.fits" % freq[1:])
-divmap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_ivar.fits" % freq[1:])
+imap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_map.fits" % freq[1:],sel=np.s_[0,...])
+divmap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_ivar.fits" % freq[1:],sel=np.s_[0,...])
 imap += imap1*divmap1
 del imap1
 div = np.nan_to_num(1./(divmap0+divmap1))
-del divmap0, divmap1
+del divmap0,divmap1
 imap *= div
-# FIXME: theory 
-ells = np.arange(0,8000,1)
-theory = cosmology.default_theory()
-ps = theory.lCl('TT',ells)[None,None,...]
+ps = powspec.read_spectrum("input/cosmo2017_10K_acc3_scalCls.dat") # CHECK
 # beam
 rs = np.deg2rad(np.linspace(0,90.,10000)) # FIXME
 rbeam = maps.gauss_beam_real(rs,pfwhm)
