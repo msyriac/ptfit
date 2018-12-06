@@ -1,0 +1,29 @@
+"p100":
+  fwhm: 9.66
+  tnoise: 77.4
+  pnoise: 117.6
+  afreq: "090"
+
+"p143":
+  fwhm: 7.22
+  tnoise: 33.0
+  pnoise: 70.2
+  afreq: "150"
+
+"p217":
+  fwhm: 4.90
+  tnoise: 46.8
+  pnoise: 105.0
+  afreq: "220"
+
+"p353":
+  fwhm: 4.92
+  tnoise: 153.6
+  pnoise: 438.6
+  afreq: ""
+
+"a090":
+  fwhm: 2.2
+
+"a150":
+  fwhm: 1.4
