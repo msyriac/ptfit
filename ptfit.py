@@ -28,7 +28,7 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
         (ncomp,ncomp,nells), starting at ell=0, in compatible units
         as the map.
         beam: The beam in the map specified either as a float (interpreted
-        as FWHM in radians) or as an (nells,) array containing the 
+        as FWHM in arcminutes) or as an (nells,) array containing the 
         beam transfer function starting at ell=0 or (N,N)  array containing
         the 2D beam transfer function. This Fourier beam is 
         used in the CMB power.
@@ -53,7 +53,7 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
     shape,wcs = imap.shape, imap.wcs
     Ny,N = shape[-2:]
     assert Ny==N
-    ncomp = 1 if len(shape)==2 else shape[3]
+    ncomp = 1 if len(shape)==2 else shape[0]
     assert ncomp==1 or ncomp==3
 
     template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1),)), rbeam)
