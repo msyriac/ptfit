@@ -127,7 +127,11 @@ for task in my_tasks:
         s.add_to_stats("rejected",(task,))
         continue
     divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
-    famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+    try:
+        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+    except:
+        s.add_to_stats("rejected",(task,))
+        continue
     assert cov.size==1
     s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
