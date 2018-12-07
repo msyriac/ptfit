@@ -1,9 +1,8 @@
 from __future__ import print_function
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 from orphics import maps,io,cosmology,mpi,stats
 from pixell import enmap,reproject,powspec
-from enlib import bench
 import numpy as np
 import os,sys
 import yaml
@@ -54,8 +53,9 @@ def correct_amplitude(amp,act_fwhm,planck_fwhm):
     return amp * act_solid_angle / planck_solid_angle
 
 
-sncut = 2.
+sncut = 20.
 arc = 30.
+decmax = 70.
 npix = int(arc/0.5)
 freq = "p"+sys.argv[1]
 yaml_file = "input/paths.yml"
@@ -75,7 +75,6 @@ amps = correct_amplitude(act_amps,afwhm,pfwhm)
 err_amps = correct_amplitude(err_act_amps,afwhm,pfwhm)
 noise = tnoise/np.sqrt(parea)
 noise_alt = tnoise/pfwhm
-print(noise,noise_alt)
 sns = amps/noise
 Ntot = len(amps)
 # Set A
@@ -109,9 +108,9 @@ imap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_map.fits
 divmap1 = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_1_ivar.fits" % freq[1:],sel=np.s_[0,...])
 imap += imap1*divmap1
 del imap1
-div = np.nan_to_num(1./(divmap0+divmap1))
+div = divmap0+divmap1
 del divmap0,divmap1
-imap *= div
+imap = np.nan_to_num(imap/div)
 ps = powspec.read_spectrum("input/cosmo2017_10K_acc3_scalCls.dat") # CHECK
 # beam
 rs = np.deg2rad(np.linspace(0,90.,10000)) # FIXME
@@ -121,20 +120,15 @@ rejected = []
 for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
+    if np.abs(dec)>decmax: continue
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
-    modlmap = stamp.modlmap()
-    n2d = modlmap*0. + (tnoise*np.pi/180./60.)**2.
-    with bench.show("pfit"):
-        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
+    divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
+    famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
     assert cov.size==1
-    s.add_to_stats("results",(task,a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
-    print(famp.reshape(-1)[0],a_amps[task])
-    # io.plot_img(stamp)
-    # io.plot_img(stamp-pfit)
-   
+    s.add_to_stats("results",(task,a_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
