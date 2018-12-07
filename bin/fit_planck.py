@@ -53,7 +53,7 @@ def correct_amplitude(amp,act_fwhm,planck_fwhm):
     return amp * act_solid_angle / planck_solid_angle
 
 
-sncut = 20.
+sncut = 0.
 arc = 30.
 decmax = 70.
 npix = int(arc/0.5)
@@ -82,6 +82,7 @@ a_ras = ras[sns>sncut]
 a_decs = decs[sns>sncut]
 a_amps = amps[sns>sncut]
 a_err_amps = err_amps[sns>sncut]
+a_sns = sns[sns>sncut]
 # Set B
 b_ras = ras[sns<=sncut]
 b_decs = decs[sns<=sncut]
@@ -128,7 +129,7 @@ for task in my_tasks:
     divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
     famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
     assert cov.size==1
-    s.add_to_stats("results",(task,a_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
+    s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
