@@ -51,8 +51,8 @@ def correct_amplitude(amp,act_fwhm,planck_fwhm):
     return amp * act_solid_angle / planck_solid_angle
 
 
-sncut = 1.
-arc = 20.
+sncut = 30.
+arc = 30.
 npix = int(arc/0.5)
 freq = "p"+sys.argv[1]
 yaml_file = "input/paths.yml"
@@ -64,11 +64,14 @@ with open(yaml_file) as f:
 afreq = cplanck[freq]['afreq']
 tnoise = cplanck[freq]['tnoise']
 pfwhm = cplanck[freq]['fwhm']
+parea = cplanck[freq]['area']
 afwhm = cplanck["a"+afreq]['fwhm']
 cat_file = paths['cat_files'].replace('???',afreq)
 ras,decs,act_amps = np.loadtxt(cat_file,usecols=[1,2,4],unpack=True)
 amps = correct_amplitude(act_amps,afwhm,pfwhm)
-noise = tnoise/pfwhm
+noise = tnoise/np.sqrt(parea)
+noise_alt = tnoise/pfwhm
+print(noise,noise_alt)
 sns = amps/noise
 Ntot = len(amps)
 # Set A
@@ -119,10 +122,13 @@ for task in my_tasks:
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
-    famp,cov,_ = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
+    famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
     assert cov.size==1
-    s.add_to_stats("results",(task,famp,cov.reshape(-1)[0]))
-    #print(famp,a_amps[task])
+    s.add_to_stats("results",(task,a_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
+    print(famp.reshape(-1)[0],a_amps[task])
+    # io.plot_img(stamp)
+    # io.plot_img(stamp-pfit)
+    
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
