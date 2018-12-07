@@ -1,12 +1,13 @@
 from __future__ import print_function
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 from orphics import maps,io,cosmology,mpi,stats
 from pixell import enmap,reproject,powspec
 import numpy as np
 import os,sys
 import yaml
 import ptfit
+import traceback
 
 
 """
@@ -121,6 +122,7 @@ rejected = []
 for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
+    if task!=1172: continue # buggy template --  template ends up being zero
     if np.abs(dec)>decmax: continue
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
     if stamp is None: 

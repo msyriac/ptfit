@@ -55,7 +55,7 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
     assert Ny==N
     ncomp = 1 if len(shape)==2 else shape[0]
     assert ncomp==1 or ncomp==3
-    template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1),)), rbeam)
+    template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1.),)), rbeam)
     if totp2d is None:
         modlmap = enmap.modlmap(shape,wcs)
         if ps.ndim==1: ps = ps.reshape((1,1,ps.size))
