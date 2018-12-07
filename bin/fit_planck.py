@@ -67,8 +67,9 @@ pfwhm = cplanck[freq]['fwhm']
 parea = cplanck[freq]['area']
 afwhm = cplanck["a"+afreq]['fwhm']
 cat_file = paths['cat_files'].replace('???',afreq)
-ras,decs,act_amps = np.loadtxt(cat_file,usecols=[1,2,4],unpack=True)
+ras,decs,act_amps,err_act_amps = np.loadtxt(cat_file,usecols=[1,2,4,5],unpack=True)
 amps = correct_amplitude(act_amps,afwhm,pfwhm)
+err_amps = correct_amplitude(err_act_amps,afwhm,pfwhm)
 noise = tnoise/np.sqrt(parea)
 noise_alt = tnoise/pfwhm
 print(noise,noise_alt)
@@ -78,6 +79,7 @@ Ntot = len(amps)
 a_ras = ras[sns>sncut]
 a_decs = decs[sns>sncut]
 a_amps = amps[sns>sncut]
+a_err_amps = err_amps[sns>sncut]
 # Set B
 b_ras = ras[sns<=sncut]
 b_decs = decs[sns<=sncut]
@@ -124,11 +126,11 @@ for task in my_tasks:
         continue
     famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
     assert cov.size==1
-    s.add_to_stats("results",(task,a_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
+    s.add_to_stats("results",(task,a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     print(famp.reshape(-1)[0],a_amps[task])
     # io.plot_img(stamp)
     # io.plot_img(stamp-pfit)
-    
+   
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
