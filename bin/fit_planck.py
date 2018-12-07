@@ -1,6 +1,9 @@
 from __future__ import print_function
+import matplotlib
+matplotlib.use('Agg')
 from orphics import maps,io,cosmology,mpi,stats
 from pixell import enmap,reproject,powspec
+from enlib import bench
 import numpy as np
 import os,sys
 import yaml
@@ -51,7 +54,7 @@ def correct_amplitude(amp,act_fwhm,planck_fwhm):
     return amp * act_solid_angle / planck_solid_angle
 
 
-sncut = 30.
+sncut = 2.
 arc = 30.
 npix = int(arc/0.5)
 freq = "p"+sys.argv[1]
@@ -117,12 +120,13 @@ for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
-    modlmap = stamp.modlmap()
-    n2d = modlmap*0. + (tnoise*np.pi/180./60.)**2.
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
-    famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
+    modlmap = stamp.modlmap()
+    n2d = modlmap*0. + (tnoise*np.pi/180./60.)**2.
+    with bench.show("pfit"):
+        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=None,ps=ps,beam=pfwhm,n2d=n2d)
     assert cov.size==1
     s.add_to_stats("results",(task,a_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     print(famp.reshape(-1)[0],a_amps[task])

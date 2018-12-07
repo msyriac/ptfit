@@ -1,2 +1,2 @@
-planck_files: /home/msyriac/data/planck/sigurd/
-cat_files: /home/msyriac/data/act/catalogs/sigurd/mr3c_merged_f???.txt
+planck_files: /scratch/gpfs/mathewm/data/planck/sigurd/
+cat_files: /scratch/gpfs/mathewm/data/act/catalogs/sigurd/mr3c_merged_f???.txt
