@@ -1,12 +1,13 @@
 from __future__ import print_function
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 from orphics import maps,io,cosmology,mpi,stats
 from pixell import enmap,reproject,powspec
 import numpy as np
 import os,sys
 import yaml
 import ptfit
+import traceback
 
 
 """
@@ -121,13 +122,22 @@ rejected = []
 for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
+    if task!=1172: continue # buggy template --  template ends up being zero
     if np.abs(dec)>decmax: continue
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
     divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
-    famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+    try:
+        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+    except:
+        traceback.print_exc()
+        print(rank,task,ra,dec,a_sns[task],a_amps[task],a_err_amps[task],stamp.shape)
+        io.plot_img(stamp,"errstamp.png")
+        io.plot_img(divstamp,"errdivstamp.png")
+        print("ERROR")
+        sys.exit(1)
     assert cov.size==1
     s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
