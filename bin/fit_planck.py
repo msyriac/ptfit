@@ -114,27 +114,29 @@ div = divmap0+divmap1
 del divmap0,divmap1
 imap = np.nan_to_num(imap/div)
 ps = powspec.read_spectrum("input/cosmo2017_10K_acc3_scalCls.dat") # CHECK
-# beam
-rs = np.deg2rad(np.linspace(0,90.,10000)) # FIXME
-rbeam = maps.gauss_beam_real(rs,pfwhm)
 # Loop
 rejected = []
 for task in my_tasks:
     ra = a_ras[task]
     dec = a_decs[task]
-    if task!=1172: continue # buggy template --  template ends up being zero
     if np.abs(dec)>decmax: continue
     stamp = reproject.cutout(imap, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
     if stamp is None: 
         s.add_to_stats("rejected",(task,))
         continue
     divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
+    # n = tnoise/np.rad2deg(np.sqrt(enmap.pixsizemap(stamp.shape,stamp.wcs))*60.)
+    # divstamp = 1./(n**2.)
+    # print(1./np.sqrt(divstamp))
+    
     try:
-        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),(rs,rbeam),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),np.deg2rad(pfwhm/60.),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
     except:
+        traceback.print_exc()
         s.add_to_stats("rejected",(task,))
         continue
     assert cov.size==1
+    print(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0])
     s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
