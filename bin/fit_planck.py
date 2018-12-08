@@ -125,18 +125,14 @@ for task in my_tasks:
         s.add_to_stats("rejected",(task,))
         continue
     divstamp = reproject.cutout(div, ra=np.deg2rad(ra), dec=np.deg2rad(dec), pad=1,  npix=npix)
-    # n = tnoise/np.rad2deg(np.sqrt(enmap.pixsizemap(stamp.shape,stamp.wcs))*60.)
-    # divstamp = 1./(n**2.)
-    # print(1./np.sqrt(divstamp))
-    
     try:
-        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),np.deg2rad(pfwhm/60.),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
+        famp,cov,pfit = ptfit.ptsrc_fit(stamp,np.deg2rad(dec),np.deg2rad(ra),maps.sigma_from_fwhm(np.deg2rad(pfwhm/60.)),div=divstamp,ps=ps,beam=pfwhm,n2d=None)
     except:
         traceback.print_exc()
         s.add_to_stats("rejected",(task,))
         continue
     assert cov.size==1
-    print(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0])
+    # print(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0])
     s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
