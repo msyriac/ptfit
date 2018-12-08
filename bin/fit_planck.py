@@ -8,6 +8,9 @@ import os,sys
 import yaml
 import ptfit
 import traceback
+import git
+repo = git.Repo(search_parent_directories=True)
+sha = repo.head.object.hexsha
 
 
 """
@@ -133,16 +136,17 @@ for task in my_tasks:
         continue
     assert cov.size==1
     # print(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0])
-    s.add_to_stats("results",(task,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
+    s.add_to_stats("results",(task,ra,dec,a_sns[task],a_amps[task],a_err_amps[task],famp.reshape(-1)[0],cov.reshape(-1)[0]))
     if rank==0: print ("Rank 0 done with task ", task+1, " / " , len(my_tasks))
 
 s.get_stats()
 
 if rank==0:
     results = s.vectors['results']
-    np.savetxt("results_%s.txt" % freq,results)
+    np.savetxt("results_%s_%s.txt" % (freq,sha),results)
     try: 
         rejected = s.vectors['rejected']
-        np.savetxt("rejected_%s.txt" % freq,rejected)
+        np.savetxt("rejected_%s_%s.txt" % (freq,sha),rejected)
     except:
+        traceback.print_exc()
         pass
