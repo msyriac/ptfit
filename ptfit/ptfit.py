@@ -4,11 +4,10 @@ Dependencies: pixell, enlib.pointsrcs, numpy, scipy
 """
 
 from __future__ import print_function
-from pixell import enmap
+from pixell import enmap,pointsrcs
 import numpy as np
 from scipy.stats import chi2
 from scipy.interpolate import interp1d
-from enlib import pointsrcs
 
 
 

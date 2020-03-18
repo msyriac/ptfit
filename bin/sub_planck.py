@@ -66,7 +66,7 @@ srcs = np.stack((np.deg2rad(decs),np.deg2rad(ras),amps)).T
 for i in range(2):
     imap = enmap.read_map(paths['planck_files'] + "planck_hybrid_%s_2way_%d_map.fits" % (freq[1:],i),sel=np.s_[0,...])
     shape,wcs = imap.shape,imap.wcs
-    model = pointsrcs.sim_srcs(shape[-2:], wcs, srcs, np.deg2rad(pfwhm/60.))
+    model = pointsrcs.sim_srcs(shape[-2:], wcs, srcs, np.deg2rad(pfwhm/60.)) # wrong -- should be sigma?
     smap = imap - model
     enmap.write_map(paths['planck_files'] + "planck_hybrid_%s_2way_%d_map_I_srcfree.fits" % (freq[1:],i),smap)
     enmap.write_map(paths['planck_files'] + "planck_hybrid_%s_2way_%d_map_I_model.fits" % (freq[1:],i),model)
