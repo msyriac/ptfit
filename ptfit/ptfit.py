@@ -8,6 +8,106 @@ from pixell import enmap,pointsrcs
 import numpy as np
 from scipy.stats import chi2
 from scipy.interpolate import interp1d
+try: from enlib import bench
+except: pass
+
+class Pfit(object):
+    def __init__(self,shape,wcs,dec=None,ra=None,rbeam=None,div=None,ps=None,beam=None,iau=False,
+                 n2d=None,totp2d=None,invert=False):
+        Ny,N = shape[-2:]
+        self.shape = shape
+        self.wcs = wcs
+        assert Ny==N
+        self.N = N
+        ncomp = 1 if len(shape)==2 else shape[0]
+        assert ncomp==1 or ncomp==3
+        self.ncomp = ncomp
+        if totp2d is None:
+            modlmap = enmap.modlmap(shape,wcs)
+            if ps.ndim==1: ps = ps.reshape((1,1,ps.size))
+            nells = ps.shape[-1]
+            ps = ps[:ncomp,:ncomp,:]
+            self.ells = np.arange(nells)
+            cmb2d = np.zeros((ncomp,ncomp,N,N))
+            for i in range(ncomp):
+                for j in range(i,ncomp):
+                    cmb2d[i,j] = cmb2d[j,i] = interp(self.ells,ps[i,j])(modlmap)
+            beam = np.asarray(beam)
+            if beam.ndim==0: beam2d = gauss_beam(modlmap,beam)
+            elif beam.ndim==1:
+                nells = beam.size
+                self.ells = np.arange(nells)
+                beam2d = maps.interp(self.ells,beam)(modlmap)
+            elif beam.ndim==2: beam2d = beam
+            self.ccov = stamp_pixcov_from_theory(N,
+                                            enmap.enmap(cmb2d,wcs),
+                                            n2d_IQU=0. if n2d is None else n2d,
+                                            beam2d=beam2d,iau=iau,
+                                            return_pow=False)
+            if n2d is None:
+                if div.ndim == 2: div = div[None,...]
+                dncomp = div.shape[0]
+                ncov = np.zeros((ncomp,ncomp,N*N,N*N))
+                if dncomp==1:
+                    # assuming div is inverse variance in intensity
+                    # so Q and U should have x 1/2
+                    ncovI = np.diag(1./div.reshape(-1))
+                    ncov[0,0] = ncovI
+                    if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI*2.
+                elif dncomp==3:
+                    assert ncomp==dncomp
+                    for i in range(dncomp): ncov[i,i] = 1./div[i].reshape(-1)
+                else:
+                    raise ValueError
+                self.ccov += ncov
+        else:
+            self.ccov = fcov_to_rcorr(shape,wcs,totp2d,N)
+        # --- Make sure that the pcov is in the right order vector(I,Q,U) ---
+        # It is currently in (ncomp,ncomp,n,n) order
+        # We transpose it to (ncomp,n,ncomp,n) order
+        # so that when it is reshaped into a 2D array,
+        # a row/column will correspond to an (I,Q,U) vector
+        self.ccov = np.transpose(self.ccov,(0,2,1,3))
+        self.ccov = self.ccov.reshape((ncomp*N**2,ncomp*N**2))
+        if invert:
+            from enlib import utils
+            self.Cinv = np.linalg.inv(self.ccov)
+        else:
+            self.Cinv = None
+            self.solver = lambda a,b: Solver(self.ccov,u=None).solve(b)
+        if dec is not None: self.update_template(dec,ra,rbeam)
+
+    def update_template(self,dec,ra,rbeam):
+        shape = self.shape
+        wcs = self.wcs
+        ncomp = self.ncomp
+        N = self.N
+        self.template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1.),)), rbeam)
+        self.funcs = []
+        for i in range(ncomp):
+            tzeros = np.zeros((ncomp*N**2,))
+            tzeros[i*ncomp*N**2:(i+1)*ncomp*N**2] = self.template.reshape(-1)
+            self.funcs.append(lambda x: tzeros.copy())
+        
+    def fit(self,imap=None,dec=None,ra=None,rbeam=None):
+        if dec is not None: self.update_template(dec,ra,rbeam)
+        ncomp = self.ncomp
+        N = self.N
+        if imap is None:
+            imap = self.imap
+            Cy = self.Cy
+        else:
+            self.imap = imap
+            C = self.ccov
+            y = imap.reshape(-1)[:,None] 
+            Cy = self.solver(C,y)
+            self.Cy = Cy
+        pflux,cov,chisquare,_ = fit_linear_model(self.ells,imap.reshape(-1),self.ccov,funcs=self.funcs,dofs=None,Cinv=self.Cinv,Cy=Cy,solver=self.solver)
+        pflux = pflux.reshape((ncomp,))
+        cov = cov.reshape((ncomp,ncomp))
+        fit = np.zeros((ncomp,N,N))
+        for i in range(ncomp): fit[i] = self.template.copy()*pflux[i]
+        return pflux,cov,fit,chisquare.reshape(-1)[0]
 
 
 
@@ -50,69 +150,10 @@ def ptsrc_fit(imap,dec,ra,rbeam,div=None,ps=None,beam=None,iau=False,
 
     """
     shape,wcs = imap.shape, imap.wcs
-    Ny,N = shape[-2:]
-    assert Ny==N
-    ncomp = 1 if len(shape)==2 else shape[0]
-    assert ncomp==1 or ncomp==3
-    template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1.),)), rbeam)
-    if totp2d is None:
-        modlmap = enmap.modlmap(shape,wcs)
-        if ps.ndim==1: ps = ps.reshape((1,1,ps.size))
-        nells = ps.shape[-1]
-        ps = ps[:ncomp,:ncomp,:]
-        ells = np.arange(nells)
-        cmb2d = np.zeros((ncomp,ncomp,N,N))
-        for i in range(ncomp):
-            for j in range(i,ncomp):
-                cmb2d[i,j] = cmb2d[j,i] = interp(ells,ps[i,j])(modlmap)
-        beam = np.asarray(beam)
-        if beam.ndim==0: beam2d = gauss_beam(modlmap,beam)
-        elif beam.ndim==1:
-            nells = beam.size
-            ells = np.arange(nells)
-            beam2d = maps.interp(ells,beam)(modlmap)
-        elif beam.ndim==2: beam2d = beam
-        ccov = stamp_pixcov_from_theory(N,
-                                        enmap.enmap(cmb2d,wcs),
-                                        n2d_IQU=0. if n2d is None else n2d,
-                                        beam2d=beam2d,iau=iau,
-                                        return_pow=False)
-        if n2d is None:
-            if div.ndim == 2: div = div[None,...]
-            dncomp = div.shape[0]
-            ncov = np.zeros((ncomp,ncomp,N*N,N*N))
-            if dncomp==1:
-                # assuming div is inverse variance in intensity
-                # so Q and U should have x 1/2
-                ncovI = np.diag(1./div.reshape(-1))
-                ncov[0,0] = ncovI
-                if ncomp>1: ncov[1,1] = ncov[2,2] = ncovI*2.
-            elif dncomp==3:
-                assert ncomp==dncomp
-                for i in range(dncomp): ncov[i,i] = 1./div[i].reshape(-1)
-            else:
-                raise ValueError
-            ccov += ncov
-    else:
-        ccov = fcov_to_rcorr(shape,wcs,totp2d,N)
-    # --- Make sure that the pcov is in the right order vector(I,Q,U) ---
-    # It is currently in (ncomp,ncomp,n,n) order
-    # We transpose it to (ncomp,n,ncomp,n) order
-    # so that when it is reshaped into a 2D array,
-    # a row/column will correspond to an (I,Q,U) vector
-    ccov = np.transpose(ccov,(0,2,1,3))
-    ccov = ccov.reshape((ncomp*N**2,ncomp*N**2))
-    funcs = []
-    for i in range(ncomp):
-        tzeros = np.zeros((ncomp*N**2,))
-        tzeros[i*ncomp*N**2:(i+1)*ncomp*N**2] = template.reshape(-1)
-        funcs.append(lambda x: tzeros.copy())
-    pflux,cov,_,_ = fit_linear_model(ells,imap.reshape(-1),ccov,funcs=funcs,dofs=None)
-    pflux = pflux.reshape((ncomp,))
-    cov = cov.reshape((ncomp,ncomp))
-    fit = np.zeros((ncomp,N,N))
-    for i in range(ncomp): fit[i] = template.copy()*pflux[i]
-    return pflux,cov,fit
+    pfitter = Pfit(shape=shape,wcs=wcs,dec=dec,ra=ra,rbeam=rbeam,div=div,ps=ps,beam=beam,iau=iau,
+              n2d=n2d,totp2d=totp2d)
+    return pfitter.fit(imap)
+
 
 
 """
@@ -182,23 +223,29 @@ def fcov_to_rcorr(shape,wcs,p2d,N):
     return ocorr
 
 # duplicated from orphics.stats
-def fit_linear_model(x,y,ycov,funcs,dofs=None,deproject=True):
+def fit_linear_model(x,y,ycov,funcs,dofs=None,deproject=True,Cinv=None,Cy=None,solver=None):
     """
     Given measurements with known uncertainties, this function fits those to a linear model:
     y = a0*funcs[0](x) + a1*funcs[1](x) + ...
     and returns the best fit coefficients a0,a1,... and their uncertainties as a covariance matrix
     """
-    s = solve if deproject else np.linalg.solve
+    if solver is not None:
+        s = solver
+    else:
+        s = solve if deproject else np.linalg.solve
     C = ycov
     y = y[:,None] 
     A = np.zeros((y.size,len(funcs)))
     for i,func in enumerate(funcs):
         A[:,i] = func(x)
-    cov = np.linalg.inv(np.dot(A.T,solve(C,A)))
-    b = np.dot(A.T,solve(C,y))
+    CA = s(C,A) if Cinv is None else np.dot(Cinv,A)
+    cov = np.linalg.inv(np.dot(A.T,CA))
+    if Cy is None: Cy = s(C,y) if Cinv is None else np.dot(Cinv,y)
+    b = np.dot(A.T,Cy)
     X = np.dot(cov,b)
     YAX = y - np.dot(A,X)
-    chisquare = np.dot(YAX.T,solve(C,YAX))
+    CYAX = s(C,YAX) if Cinv is None else np.dot(Cinv,YAX)
+    chisquare = np.dot(YAX.T,CYAX)
     dofs = len(x)-len(funcs)-1 if dofs is None else dofs
     pte = 1 - chi2.cdf(chisquare, dofs)    
     return X,cov,chisquare/dofs,pte
@@ -232,7 +279,6 @@ def solve(C,x,u=None):
     This function goes one step further and deprojects a common mode for the entire
     covariance matrix, which is often what is needed.
     """
-    N = C.shape[0]
     s = Solver(C,u=u)
     return s.solve(x)
 
