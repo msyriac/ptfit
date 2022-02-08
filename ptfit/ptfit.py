@@ -14,11 +14,12 @@ except: pass
 class Pfit(object):
     def __init__(self,shape,wcs,dec=None,ra=None,rbeam=None,div=None,ps=None,beam=None,iau=False,
                  n2d=None,totp2d=None,invert=False):
-        Ny,N = shape[-2:]
+        Ny,Nx = shape[-2:]
         self.shape = shape
         self.wcs = wcs
-        assert Ny==N
-        self.N = N
+        #assert Ny==N
+        self.Ny = Ny
+        self.Nx = Nx
         ncomp = 1 if len(shape)==2 else shape[0]
         assert ncomp==1 or ncomp==3
         self.ncomp = ncomp
@@ -28,7 +29,7 @@ class Pfit(object):
             nells = ps.shape[-1]
             ps = ps[:ncomp,:ncomp,:]
             self.ells = np.arange(nells)
-            cmb2d = np.zeros((ncomp,ncomp,N,N))
+            cmb2d = np.zeros((ncomp,ncomp,Ny,Nx))
             for i in range(ncomp):
                 for j in range(i,ncomp):
                     cmb2d[i,j] = cmb2d[j,i] = interp(self.ells,ps[i,j])(modlmap)
@@ -39,7 +40,7 @@ class Pfit(object):
                 self.ells = np.arange(nells)
                 beam2d = maps.interp(self.ells,beam)(modlmap)
             elif beam.ndim==2: beam2d = beam
-            self.ccov = stamp_pixcov_from_theory(N,
+            self.ccov = stamp_pixcov_from_theory(Ny,Nx,
                                             enmap.enmap(cmb2d,wcs),
                                             n2d_IQU=0. if n2d is None else n2d,
                                             beam2d=beam2d,iau=iau,
@@ -47,7 +48,7 @@ class Pfit(object):
             if n2d is None:
                 if div.ndim == 2: div = div[None,...]
                 dncomp = div.shape[0]
-                ncov = np.zeros((ncomp,ncomp,N*N,N*N))
+                ncov = np.zeros((ncomp,ncomp,Ny*Nx,Ny*Nx))
                 if dncomp==1:
                     # assuming div is inverse variance in intensity
                     # so Q and U should have x 1/2
@@ -68,10 +69,11 @@ class Pfit(object):
         # so that when it is reshaped into a 2D array,
         # a row/column will correspond to an (I,Q,U) vector
         self.ccov = np.transpose(self.ccov,(0,2,1,3))
-        self.ccov = self.ccov.reshape((ncomp*N**2,ncomp*N**2))
+        self.ccov = self.ccov.reshape((ncomp*Ny*Nx,ncomp*Ny*Nx))
         if invert:
             from enlib import utils
             self.Cinv = np.linalg.inv(self.ccov)
+            self.solver = lambda a,b: np.dot(self.Cinv ,b)
         else:
             self.Cinv = None
             self.solver = lambda a,b: Solver(self.ccov,u=None).solve(b)
@@ -81,18 +83,20 @@ class Pfit(object):
         shape = self.shape
         wcs = self.wcs
         ncomp = self.ncomp
-        N = self.N
+        Ny = self.Ny
+        Nx = self.Nx
         self.template = pointsrcs.sim_srcs(shape[-2:], wcs, np.array(((dec,ra,1.),)), rbeam)
         self.funcs = []
         for i in range(ncomp):
-            tzeros = np.zeros((ncomp*N**2,))
-            tzeros[i*ncomp*N**2:(i+1)*ncomp*N**2] = self.template.reshape(-1)
+            tzeros = np.zeros((ncomp*Ny*Nx,))
+            tzeros[i*ncomp*Ny*Nx:(i+1)*ncomp*Ny*Nx] = self.template.reshape(-1)
             self.funcs.append(lambda x: tzeros.copy())
         
     def fit(self,imap=None,dec=None,ra=None,rbeam=None):
         if dec is not None: self.update_template(dec,ra,rbeam)
         ncomp = self.ncomp
-        N = self.N
+        Ny = self.Ny
+        Nx = self.Nx
         if imap is None:
             imap = self.imap
             Cy = self.Cy
@@ -105,7 +109,7 @@ class Pfit(object):
         pflux,cov,chisquare,_ = fit_linear_model(self.ells,imap.reshape(-1),self.ccov,funcs=self.funcs,dofs=None,Cinv=self.Cinv,Cy=Cy,solver=self.solver)
         pflux = pflux.reshape((ncomp,))
         cov = cov.reshape((ncomp,ncomp))
-        fit = np.zeros((ncomp,N,N))
+        fit = np.zeros((ncomp,Ny,Nx))
         for i in range(ncomp): fit[i] = self.template.copy()*pflux[i]
         return pflux,cov,fit,chisquare.reshape(-1)[0]
 
@@ -189,7 +193,7 @@ def rotate_pol_power(shape,wcs,cov,iau=False,inverse=False):
     return rp2d
 
 # duplicated from orphics.pixcov
-def stamp_pixcov_from_theory(N,cmb2d_TEB,n2d_IQU=0.,beam2d=1.,iau=False,return_pow=False):
+def stamp_pixcov_from_theory(Ny,Nx,cmb2d_TEB,n2d_IQU=0.,beam2d=1.,iau=False,return_pow=False):
     """Return the pixel covariance for a stamp N pixels across given the 2D IQU CMB power spectrum,
     2D beam template and 2D IQU noise power spectrum.
     """
@@ -205,19 +209,19 @@ def stamp_pixcov_from_theory(N,cmb2d_TEB,n2d_IQU=0.,beam2d=1.,iau=False,return_p
 
     if ncomp==3: cmb2d = rotate_pol_power(shape,wcs,cmb2d,iau=iau,inverse=True)
     p2d = cmb2d*beam2d**2.+n2d
-    if not(return_pow): return fcov_to_rcorr(shape,wcs,p2d,N)
-    return fcov_to_rcorr(shape,wcs,p2d,N), cmb2d
+    if not(return_pow): return fcov_to_rcorr(shape,wcs,p2d,Ny,Nx)
+    return fcov_to_rcorr(shape,wcs,p2d,Ny,Nx), cmb2d
 
 # duplicated from orphics.pixcov
-def fcov_to_rcorr(shape,wcs,p2d,N):
+def fcov_to_rcorr(shape,wcs,p2d,Ny,Nx):
     """Convert a 2D PS into a pix-pix covariance
     """
     ncomp = p2d.shape[0]
     p2d *= np.prod(shape[-2:])/enmap.area(shape,wcs)
-    ocorr = enmap.zeros((ncomp,ncomp,N*N,N*N),wcs)
+    ocorr = enmap.zeros((ncomp,ncomp,Ny*Nx,Ny*Nx),wcs)
     for i in range(ncomp):
         for j in range(i,ncomp):
-            dcorr = ps2d_to_mat(p2d[i,j].copy(), N).reshape((N*N,N*N))
+            dcorr = ps2d_to_mat(p2d[i,j].copy(), Ny,Nx).reshape((Ny*Nx,Ny*Nx))
             ocorr[i,j] = dcorr.copy()
             if i!=j: ocorr[j,i] = dcorr.copy()
     return ocorr
@@ -288,22 +292,22 @@ def solve(C,x,u=None):
 # also duplicated in orphics.pixcov
 
 def map_ifft(x): return enmap.ifft(x).real
-def corrfun_thumb(corr, n):
-    tmp = np.roll(np.roll(corr, n, -1)[...,:2*n], n, -2)[...,:2*n,:]
-    return np.roll(np.roll(tmp, -n, -1), -n, -2)
+def corrfun_thumb(corr, Ny,Nx):
+    tmp = np.roll(np.roll(corr, Ny, -1)[...,:2*Ny], Nx, -2)[...,:2*Nx,:]
+    return np.roll(np.roll(tmp, -Ny, -1), -Nx, -2)
 
 
-def corr_to_mat(corr, n):
-    res = enmap.zeros([n,n,n,n],dtype=corr.dtype)
-    for i in range(n):
-        tmp = np.roll(corr, i, 0)[:n,:]
-        for j in range(n):
-            res[i,j] = np.roll(tmp, j, 1)[:,:n]
+def corr_to_mat(corr, Ny, Nx):
+    res = enmap.zeros([Ny,Nx,Ny,Nx],dtype=corr.dtype)
+    for i in range(Ny):
+        tmp = np.roll(corr, i, 0)[:Ny,:]
+        for j in range(Nx):
+            res[i,j] = np.roll(tmp, j, 1)[:,:Nx]
     return res
-def ps2d_to_mat(ps2d, n):
+def ps2d_to_mat(ps2d, Ny,Nx):
     corrfun = map_ifft(ps2d+0j)/(ps2d.shape[-2]*ps2d.shape[-1])**0.5
-    thumb   = corrfun_thumb(corrfun, n)
-    mat     = corr_to_mat(thumb, n)
+    thumb   = corrfun_thumb(corrfun, Ny,Nx)
+    mat     = corr_to_mat(thumb, Ny,Nx)
     return mat
 
 
